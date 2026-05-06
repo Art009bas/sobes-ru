@@ -28,7 +28,19 @@ const CONFIG = {
 // === ВЕБХУК (вызывается с лендинга) ===
 function doPost(e) {
   try {
-    const data = JSON.parse(e.postData.contents);
+    // Поддерживаем и JSON, и form-data
+    let data;
+    if (e.postData && e.postData.contents) {
+      try {
+        data = JSON.parse(e.postData.contents);
+      } catch(e2) {
+        // form-data — парсим параметры
+        data = e.parameter;
+      }
+    } else {
+      data = e.parameter;
+    }
+    
     const action = data.action || 'register';
 
     if (action === 'register') {

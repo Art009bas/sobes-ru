@@ -384,22 +384,43 @@ function setStatus(el, text, color, display) {
   el.style.display = display || 'block';
 }
 
-// === API-запросы ===
-async function apiPost(data) {
-  if (!ENV.API_URL) return null;
-  try {
-    await fetch(ENV.API_URL, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
-    // no-cors ответ opaque — тело не читается, считаем что отправилось
-    return { ok: true };
-  } catch(e) {
-    console.log('API Error:', e);
-    return { ok: true }; // считаем что отправилось
-  }
+// === API-запросы (через iframe — единственный способ обойти CORS с GitHub Pages) ===
+let apiIframe = null;
+
+function apiPost(data) {
+  if (!ENV.API_URL) return Promise.resolve({ ok: true });
+  
+  // Создаём iframe и форму, отправляем POST (обходит CORS)
+  return new Promise(resolve => {
+    if (!apiIframe || !apiIframe.contentWindow) {
+      apiIframe = document.createElement('iframe');
+      apiIframe.style.display = 'none';
+      apiIframe.name = 'apiFrame';
+      document.body.appendChild(apiIframe);
+    }
+    
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = ENV.API_URL;
+    form.target = 'apiFrame';
+    form.acceptCharset = 'UTF-8';
+    
+    // Параметры как скрытые поля
+    for (const [key, val] of Object.entries(data)) {
+      const inp = document.createElement('input');
+      inp.type = 'hidden';
+      inp.name = key;
+      inp.value = typeof val === 'string' ? val : JSON.stringify(val);
+      form.appendChild(inp);
+    }
+    
+    document.body.appendChild(form);
+    form.submit();
+    document.body.removeChild(form);
+    
+    // Сразу разрешаем — iframe не ждём
+    setTimeout(() => resolve({ ok: true }), 100);
+  });
 }
 
 async function apiGet(params) {
