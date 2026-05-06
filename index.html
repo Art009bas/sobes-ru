@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Кофе за видео-резюме — SOBES.RU</title>
+  <base href="/sobes-ru/">
+  <meta name="description" content="Запиши видео-резюме — получи кофе в подарок от Миндайк">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    :root {
+      --bg: #faf9f6;
+      --surface: #ffffff;
+      --text: #1c1c1e;
+      --text-secondary: #8e8e93;
+      --accent: #6b4eff;
+      --accent-hover: #5a3ee0;
+      --accent-soft: #f0edff;
+      --green: #34c759;
+      --red: #ff3b30;
+      --border: #e5e5ea;
+      --radius: 20px;
+      --radius-sm: 12px;
+      --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --shadow: 0 2px 12px rgba(0,0,0,.06);
+      --shadow-lg: 0 8px 40px rgba(0,0,0,.1);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .page {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 24px;
+      animation: fadeIn .35s ease;
+    }
+    .page.active { display: flex; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+
+    .card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 40px 32px;
+      max-width: 420px;
+      width: 100%;
+      box-shadow: var(--shadow-lg);
+      text-align: center;
+    }
+    .card__emoji { font-size: 3rem; margin-bottom: 12px; }
+    .card h1 { font-size: 1.6rem; font-weight: 800; line-height: 1.2; margin-bottom: 8px; }
+    .card h2 { font-size: 1.25rem; font-weight: 700; margin-bottom: 8px; }
+    .card p { color: var(--text-secondary); font-size: .92rem; line-height: 1.5; margin-bottom: 24px; }
+    .card .partner { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 24px; }
+
+    .input-group {
+      text-align: left;
+      margin-bottom: 16px;
+    }
+    .input-group label {
+      display: block;
+      font-weight: 600;
+      font-size: .85rem;
+      margin-bottom: 6px;
+      color: var(--text);
+    }
+    .input-group input {
+      width: 100%;
+      padding: 14px 16px;
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-family: var(--font);
+      font-size: 1rem;
+      background: var(--bg);
+      transition: border-color .2s;
+      outline: none;
+    }
+    .input-group input:focus {
+      border-color: var(--accent);
+    }
+    .input-group input.error {
+      border-color: var(--red);
+      background: #fff5f5;
+    }
+
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      width: 100%;
+      padding: 16px 28px;
+      border-radius: 100px;
+      font-weight: 600; font-size: 1rem;
+      border: none; cursor: pointer;
+      transition: all .2s;
+      text-decoration: none;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+      box-shadow: 0 4px 14px rgba(107,78,255,.3);
+    }
+    .btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); }
+    .btn-secondary {
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+    .btn-secondary:hover { background: #e5ddff; }
+    .btn-outline {
+      background: transparent;
+      color: var(--text);
+      border: 1.5px solid var(--border);
+    }
+    .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+    .btn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+    .status-msg {
+      margin-top: 12px;
+      text-align: center;
+      font-size: .85rem;
+      display: none;
+    }
+
+    /* Steps */
+    .steps { text-align: left; margin-bottom: 24px; }
+    .step { display: flex; gap: 12px; margin-bottom: 16px; align-items: flex-start; }
+    .step__num {
+      flex-shrink: 0;
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: var(--accent-soft);
+      color: var(--accent);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: .8rem;
+    }
+    .step p { color: var(--text); font-size: .9rem; margin: 0; }
+
+    /* Promo code */
+    .promocode {
+      background: var(--accent-soft);
+      border: 2px dashed var(--accent);
+      border-radius: var(--radius-sm);
+      padding: 20px;
+      margin: 20px 0;
+      text-align: center;
+    }
+    .promocode__code {
+      font-size: 1.6rem;
+      font-weight: 800;
+      letter-spacing: 3px;
+      color: var(--accent);
+      margin-bottom: 8px;
+      user-select: all;
+    }
+    .promocode__hint { font-size: .8rem; color: var(--text-secondary); }
+
+    .badge {
+      display: inline-block;
+      padding: 6px 14px;
+      border-radius: 100px;
+      font-size: .82rem;
+      font-weight: 600;
+    }
+    .badge-wait { background: #fff3cd; color: #856404; }
+    .badge-ok { background: #d1fae5; color: #065f46; }
+    .badge-no { background: #fee2e2; color: #991b1b; }
+
+    .footer-text {
+      margin-top: 32px;
+      text-align: center;
+      font-size: .78rem;
+      color: var(--text-secondary);
+    }
+  </style>
+</head>
+<body>
+
+<!-- ===== СТРАНИЦА 1 — ПРИВЕТСТВИЕ ===== -->
+<div class="page active" id="pageWelcome">
+  <div class="card">
+    <div class="card__emoji">☕</div>
+    <h1>Кофе за видео-резюме</h1>
+    <p>Запишите короткое видео о себе — и получите кофе в подарок от кофейни Миндайк</p>
+    <div class="partner">
+      <span style="font-size:.82rem;color:var(--text-secondary);">Вместе с</span>
+      <span style="font-weight:700;">mindaiq</span>
+    </div>
+    <button class="btn btn-primary" onclick="showPage('pagePhone')">
+      <i class="fas fa-arrow-right"></i> Начать
+    </button>
+    <div class="footer-text">Акция действует до 31 июля 2026</div>
+  </div>
+</div>
+
+<!-- ===== СТРАНИЦА 2 — ТЕЛЕФОН ===== -->
+<div class="page" id="pagePhone">
+  <div class="card">
+    <div class="card__emoji">📱</div>
+    <h2>Участвовать в акции</h2>
+    <p>Введите номер телефона — начнём</p>
+    <form id="regForm" onsubmit="registerUser(event)">
+      <div class="input-group">
+        <label>Номер телефона</label>
+        <input type="tel" id="phoneInput" required placeholder="+7 (___) ___-__-__">
+      </div>
+      <button type="submit" class="btn btn-primary" id="regBtn">
+        <i class="fas fa-arrow-right"></i> Получить задание
+      </button>
+      <div class="status-msg" id="regStatus"></div>
+    </form>
+    <div class="footer-text" style="margin-top:16px;">
+      <a href="#" onclick="showPage('pageWelcome');return false;" style="color:var(--accent);text-decoration:none;font-size:.85rem;">← Назад</a>
+    </div>
+  </div>
+</div>
+
+<!-- ===== СТРАНИЦА 3 — ЗАДАНИЕ ===== -->
+<div class="page" id="pageTask">
+  <div class="card">
+    <div class="card__emoji">🎥</div>
+    <h2>Ваше задание</h2>
+    <div class="steps">
+      <div class="step">
+        <div class="step__num">1</div>
+        <p>Запишите видео-резюме: расскажите о себе, опыте и навыках. До 2 минут.</p>
+      </div>
+      <div class="step">
+        <div class="step__num">2</div>
+        <p>Загрузите видео через платформу <strong>SOBES.RU</strong> (ссылка придёт по SMS)</p>
+      </div>
+      <div class="step">
+        <div class="step__num">3</div>
+        <p>Вернитесь и нажмите <strong>«Выполнил»</strong>. Мы проверим и выдадим промокод.</p>
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="markDone()" id="doneBtn">
+      <i class="fas fa-check"></i> Выполнил!
+    </button>
+    <div class="status-msg" id="taskStatus"></div>
+    <div class="footer-text" style="margin-top:16px;font-size:.8rem;color:var(--text-secondary);">
+      Номер телефона: <span id="taskPhone"></span>
+    </div>
+  </div>
+</div>
+
+<!-- ===== СТРАНИЦА 4 — ПРОВЕРКА ===== -->
+<div class="page" id="pageCheck">
+  <div class="card">
+    <div class="card__emoji" id="checkEmoji">⏳</div>
+    <h2 id="checkTitle">Проверяем ваше видео</h2>
+    <p id="checkDesc">Модератор скоро проверит. Обычно это занимает до 15 минут.</p>
+    <div id="checkStatusBadge"><span class="badge badge-wait"><i class="fas fa-clock"></i> На проверке</span></div>
+    <div id="checkRetry" style="display:none;margin-top:20px;">
+      <p style="color:var(--red);margin-bottom:12px;">Видео не найдено. Запишите и загрузите видео.</p>
+      <button class="btn btn-secondary" onclick="showPage('pageTask')">
+        <i class="fas fa-redo"></i> Вернуться к заданию
+      </button>
+    </div>
+    <div id="checkWait" style="margin-top:20px;">
+      <p style="font-size:.82rem;color:var(--text-secondary);margin-bottom:12px;">Обновляю статус каждые 10 секунд...</p>
+      <button class="btn btn-outline" onclick="forceCheck()" style="font-size:.85rem;">
+        <i class="fas fa-sync"></i> Проверить сейчас
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== СТРАНИЦА 5 — ПРОМОКОД ===== -->
+<div class="page" id="pagePromo">
+  <div class="card">
+    <div class="card__emoji">🎉</div>
+    <h2>Всё готово!</h2>
+    <p>Ваше видео-резюме принято. Покажите этот код в кофейне Миндайк:</p>
+    <div class="promocode" id="promoBlock">
+      <div class="promocode__code" id="promoCode">SR-0000-000</div>
+      <div class="promocode__hint">Назовите код бариста для получения кофе</div>
+    </div>
+    <div style="background:var(--bg);border-radius:var(--radius-sm);padding:16px;margin-bottom:16px;">
+      <p style="font-size:.85rem;color:var(--text-secondary);margin:0;">
+        <i class="fas fa-info-circle"></i> Промокод действителен 7 дней. Один кофе в одни руки.
+      </p>
+    </div>
+    <button class="btn btn-secondary" onclick="window.print()">
+      <i class="fas fa-print"></i> Распечатать
+    </button>
+  </div>
+</div>
+
+<script>
+// === Данные (в продакшене — через API) ===
+const ENV = {
+  // Включить авто-проверку (имитация модератора)
+  DEMO_MODE: true,
+  DEMO_DELAY_SEC: 20,   // через 20 сек "одобрить"
+  API_URL: 'https://script.google.com/macros/s/AKfycbwEXAMPLE/exec'  // заглушка
+};
+
+let state = {
+  phone: '',
+  userId: null,
+  promoCode: null
+};
+
+// === Маска телефона ===
+document.addEventListener('DOMContentLoaded', () => {
+  const phoneInput = document.getElementById('phoneInput');
+  if (phoneInput) {
+    phoneInput.addEventListener('input', () => {
+      let d = phoneInput.value.replace(/[^\d]/g, '');
+      if (!d.length) { phoneInput.value = ''; return; }
+      if (d.startsWith('7') || d.startsWith('8')) d = d.slice(1);
+      let v = '+7';
+      if (d.length > 0) v += ' (' + d.slice(0, 3);
+      if (d.length > 3) v += ') ' + d.slice(3, 6);
+      if (d.length > 6) v += '-' + d.slice(6, 8);
+      if (d.length > 8) v += '-' + d.slice(8, 10);
+      phoneInput.value = v;
+    });
+  }
+  // Восстановление сессии
+  const saved = localStorage.getItem('sobes_session');
+  if (saved) {
+    try {
+      const s = JSON.parse(saved);
+      state.phone = s.phone;
+      state.userId = s.userId;
+      state.promoCode = s.promoCode;
+      if (s.page) showPage(s.page);
+      if (state.phone) document.getElementById('taskPhone').textContent = state.phone;
+      if (state.promoCode) document.getElementById('promoCode').textContent = state.promoCode;
+    } catch(e) {}
+  }
+});
+
+function saveSession(page) {
+  localStorage.setItem('sobes_session', JSON.stringify({
+    phone: state.phone,
+    userId: state.userId,
+    promoCode: state.promoCode,
+    page: page
+  }));
+}
+
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  saveSession(id.replace('page', '').toLowerCase());
+}
+
+// === Регистрация ===
+async function registerUser(e) {
+  e.preventDefault();
+  const phone = document.getElementById('phoneInput').value.trim();
+  const phoneDigits = phone.replace(/[^\d]/g, '');
+
+  if (!phoneDigits || phoneDigits.length < 10 || !phone.startsWith('+7')) {
+    document.getElementById('phoneInput').classList.add('error');
+    document.getElementById('regStatus').textContent = 'Введите корректный номер телефона';
+    document.getElementById('regStatus').style.color = '#ff3b30';
+    document.getElementById('regStatus').style.display = 'block';
+    return;
+  }
+
+  document.getElementById('phoneInput').classList.remove('error');
+  const btn = document.getElementById('regBtn');
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Регистрация…';
+  btn.disabled = true;
+
+  // В продакшене: POST на Apps Script
+  state.phone = phone;
+  state.userId = 'USER-' + Date.now().toString(36).toUpperCase();
+  state.promoCode = null;
+
+  document.getElementById('taskPhone').textContent = phone;
+  btn.innerHTML = '<i class="fas fa-arrow-right"></i> Получить задание';
+  btn.disabled = false;
+  showPage('pageTask');
+
+  // Имитация регистрации на платформе
+  console.log('Registered:', state.userId, phone);
+}
+
+// === Выполнил ===
+async function markDone() {
+  const btn = document.getElementById('doneBtn');
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Отправка…';
+  btn.disabled = true;
+
+  // В продакшене: POST на Apps Script (статус: review)
+  document.getElementById('taskStatus').textContent = '✅ Заявка отправлена на проверку!';
+  document.getElementById('taskStatus').style.color = '#34c759';
+  document.getElementById('taskStatus').style.display = 'block';
+
+  btn.innerHTML = '<i class="fas fa-check"></i> Выполнил!';
+  btn.disabled = false;
+
+  showPage('pageCheck');
+
+  // Демо-режим: через N секунд автомат
+  if (ENV.DEMO_MODE) {
+    setTimeout(() => {
+      approveUser();
+    }, ENV.DEMO_DELAY_SEC * 1000);
+  }
+}
+
+// === Одобрение (вызывается модератором/демо) ===
+function approveUser() {
+  // Генерация промокода
+  const now = new Date();
+  const day = String(now.getDate()).padStart(2,'0');
+  const month = String(now.getMonth()+1).padStart(2,'0');
+  const code = 'SR-' + day + month + '-' + String(Math.floor(Math.random()*999)).padStart(3,'0');
+  state.promoCode = code;
+
+  document.getElementById('promoCode').textContent = code;
+  showPage('pagePromo');
+  saveSession('promo');
+}
+
+function rejectUser() {
+  document.getElementById('checkEmoji').textContent = '❌';
+  document.getElementById('checkTitle').textContent = 'Видео не найдено';
+  document.getElementById('checkDesc').textContent = 'Мы не нашли ваше видео-резюме. Проверьте, что вы загрузили его на платформу.';
+  document.getElementById('checkStatusBadge').innerHTML = '<span class="badge badge-no"><i class="fas fa-times"></i> Отказ</span>';
+  document.getElementById('checkRetry').style.display = 'block';
+  document.getElementById('checkWait').style.display = 'none';
+}
+
+// === Проверка статуса (вручную) ===
+async function forceCheck() {
+  // В продакшене: GET с Apps Script status={new,review,approved,rejected}
+  document.querySelector('#checkWait .btn-outline').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Проверка…';
+  document.querySelector('#checkWait .btn-outline').disabled = true;
+
+  // Демо: случайный результат
+  if (ENV.DEMO_MODE) {
+    await new Promise(r => setTimeout(r, 1000));
+    if (Math.random() > 0.3) {
+      approveUser();
+    } else {
+      rejectUser();
+    }
+  }
+  document.querySelector('#checkWait .btn-outline').innerHTML = '<i class="fas fa-sync"></i> Проверить сейчас';
+  document.querySelector('#checkWait .btn-outline').disabled = false;
+}
+
+// === Webhook для модератора (вызывается из Telegram бота) ===
+// Модератор открывает: sobes.ru/moderate?phone=+7xxx
+// Или через бота: /approve +7xxx или /reject +7xxx
+</script>
+</body>
+</html>
