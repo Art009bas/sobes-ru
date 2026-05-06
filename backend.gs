@@ -61,11 +61,24 @@ function doPost(e) {
   }
 }
 
-// === GET (проверка статуса с лендинга) ===
+// === GET (все действия, не только проверка) ===
 function doGet(e) {
-  const phone = e.parameter.phone;
-  if (!phone) return respond(400, { error: 'Phone required' });
-  return checkStatus(phone);
+  try {
+    const action = e.parameter.action || 'check';
+    const phone = e.parameter.phone;
+    
+    if (!phone) return respond(400, { error: 'Phone required' });
+    
+    if (action === 'register') {
+      return registerUser(phone);
+    }
+    if (action === 'done') {
+      return markDone(phone);
+    }
+    return checkStatus(phone);
+  } catch(err) {
+    return respond(500, { error: err.message });
+  }
 }
 
 // === РЕГИСТРАЦИЯ ===

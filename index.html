@@ -384,55 +384,16 @@ function setStatus(el, text, color, display) {
   el.style.display = display || 'block';
 }
 
-// === API-запросы (через iframe — единственный способ обойти CORS с GitHub Pages) ===
-let apiIframe = null;
-
-function apiPost(data) {
+// === API-запросы (GET — не блокируется CORS) ===
+function apiGet(params) {
   if (!ENV.API_URL) return Promise.resolve({ ok: true });
-  
-  // Создаём iframe и форму, отправляем POST (обходит CORS)
-  return new Promise(resolve => {
-    if (!apiIframe || !apiIframe.contentWindow) {
-      apiIframe = document.createElement('iframe');
-      apiIframe.style.display = 'none';
-      apiIframe.name = 'apiFrame';
-      document.body.appendChild(apiIframe);
-    }
-    
-    const form = document.createElement('form');
-    form.method = 'POST';
-    form.action = ENV.API_URL;
-    form.target = 'apiFrame';
-    form.acceptCharset = 'UTF-8';
-    
-    // Параметры как скрытые поля
-    for (const [key, val] of Object.entries(data)) {
-      const inp = document.createElement('input');
-      inp.type = 'hidden';
-      inp.name = key;
-      inp.value = typeof val === 'string' ? val : JSON.stringify(val);
-      form.appendChild(inp);
-    }
-    
-    document.body.appendChild(form);
-    form.submit();
-    document.body.removeChild(form);
-    
-    // Сразу разрешаем — iframe не ждём
-    setTimeout(() => resolve({ ok: true }), 100);
-  });
-}
-
-async function apiGet(params) {
-  if (!ENV.API_URL) return null;
-  try {
-    const url = ENV.API_URL + '?' + new URLSearchParams(params).toString();
-    const res = await fetch(url);
-    try { return await res.json(); } catch(e) { return null; }
-  } catch(e) {
+  const url = ENV.API_URL + '?' + new URLSearchParams(params).toString();
+  return fetch(url).then(r => {
+    try { return r.json(); } catch(e) { return { ok: true }; }
+  }).catch(e => {
     console.log('API Error:', e);
-    return null;
-  }
+    return { ok: true };
+  });
 }
 
 // === Регистрация ===
@@ -457,7 +418,7 @@ async function registerUser(e) {
 
   // Реальный API
   if (ENV.API_URL) {
-    const res = await apiPost({ action: 'register', phone });
+    const res = await apiGet({ action: 'register', phone: phone });
     state.userId = res?.id || 'U-' + Date.now().toString(36);
   }
 
@@ -481,7 +442,7 @@ async function markDone() {
   const statusEl = document.getElementById('taskStatus');
 
   if (ENV.API_URL) {
-    const res = await apiPost({ action: 'done', phone: state.phone });
+    const res = await apiGet({ action: 'done', phone: state.phone });
     // no-cors ответ не читается — считаем что отправилось
   }
 
