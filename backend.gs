@@ -76,10 +76,6 @@ function registerUser(phone) {
     Utilities.formatDate(now, 'Asia/Novosibirsk', 'HH:mm:ss'), ''
   ]);
 
-  tgSend(CONFIG.TG_GROUP_CHAT,
-    '📋 <b>Новый участник</b>\n👤 ' + phone + '\n🆔 ' + id
-  );
-
   return { status: 'registered', id: id, phone: phone };
 }
 
