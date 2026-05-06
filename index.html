@@ -387,7 +387,9 @@ function setStatus(el, text, color, display) {
 // === API-запросы (JSONP — не блокируется CORS) ===
 function apiCall(params) {
   if (!ENV.API_URL) return Promise.resolve();
-  return fetch(ENV.API_URL + '?' + new URLSearchParams(params).toString())
+  const { action, ...rest } = params;
+  const endpoint = action ? '/' + action : '';
+  return fetch(ENV.API_URL + endpoint + '?' + new URLSearchParams(rest).toString())
     .then(r => r.json())
     .catch(() => ({}));
 }
