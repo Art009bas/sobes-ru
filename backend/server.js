@@ -13,7 +13,7 @@ const serviceAccount = {
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
-  databaseURL: process.env.FIREBASE_DB_URL || 'https://sobes-ru-default-rtdb.firebaseio.com'
+  databaseURL: process.env.FIREBASE_DB_URL || 'https://sobes-ru-default-rtdb.europe-west1.firebasedatabase.app'
 });
 
 const db = admin.database();
