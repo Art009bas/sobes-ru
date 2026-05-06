@@ -296,19 +296,23 @@
 </div>
 
 <script>
-// === Данные (в продакшене — через API) ===
+// === Конфигурация ===
 const ENV = {
-  // Включить авто-проверку (имитация модератора)
   DEMO_MODE: true,
-  DEMO_DELAY_SEC: 20,   // через 20 сек "одобрить"
-  API_URL: 'https://script.google.com/macros/s/AKfycbwEXAMPLE/exec'  // заглушка
+  DEMO_DELAY_SEC: 15,
+  API_URL: null // вставь сюда URL веб-приложения Apps Script
 };
+
+// Вкл/выкл демо в зависимости от API_URL
+if (ENV.API_URL) ENV.DEMO_MODE = false;
 
 let state = {
   phone: '',
   userId: null,
   promoCode: null
 };
+
+let pollTimer = null;
 
 // === Маска телефона ===
 document.addEventListener('DOMContentLoaded', () => {
@@ -326,6 +330,7 @@ document.addEventListener('DOMContentLoaded', () => {
       phoneInput.value = v;
     });
   }
+
   // Восстановление сессии
   const saved = localStorage.getItem('sobes_session');
   if (saved) {
@@ -334,26 +339,65 @@ document.addEventListener('DOMContentLoaded', () => {
       state.phone = s.phone;
       state.userId = s.userId;
       state.promoCode = s.promoCode;
-      if (s.page) showPage(s.page);
+      if (s.page) showPage('page' + s.page.charAt(0).toUpperCase() + s.page.slice(1));
       if (state.phone) document.getElementById('taskPhone').textContent = state.phone;
-      if (state.promoCode) document.getElementById('promoCode').textContent = state.promoCode;
+      if (state.promoCode) {
+        document.getElementById('promoCode').textContent = state.promoCode;
+        showPage('pagePromo');
+      }
     } catch(e) {}
   }
 });
 
 function saveSession(page) {
+  const name = page.replace('page', '').toLowerCase();
   localStorage.setItem('sobes_session', JSON.stringify({
     phone: state.phone,
     userId: state.userId,
     promoCode: state.promoCode,
-    page: page
+    page: name
   }));
 }
 
 function showPage(id) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById(id).classList.add('active');
-  saveSession(id.replace('page', '').toLowerCase());
+  saveSession(id);
+}
+
+function setStatus(el, text, color, display) {
+  el.textContent = text;
+  el.style.color = color || '#ff3b30';
+  el.style.display = display || 'block';
+}
+
+// === API-запросы ===
+async function apiPost(data) {
+  if (!ENV.API_URL) return null;
+  try {
+    const res = await fetch(ENV.API_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    return await res.json();
+  } catch(e) {
+    console.log('API Error:', e);
+    return null;
+  }
+}
+
+async function apiGet(params) {
+  if (!ENV.API_URL) return null;
+  try {
+    const url = ENV.API_URL + '?' + new URLSearchParams(params).toString();
+    const res = await fetch(url);
+    return await res.json();
+  } catch(e) {
+    console.log('API Error:', e);
+    return null;
+  }
 }
 
 // === Регистрация ===
@@ -364,9 +408,7 @@ async function registerUser(e) {
 
   if (!phoneDigits || phoneDigits.length < 10 || !phone.startsWith('+7')) {
     document.getElementById('phoneInput').classList.add('error');
-    document.getElementById('regStatus').textContent = 'Введите корректный номер телефона';
-    document.getElementById('regStatus').style.color = '#ff3b30';
-    document.getElementById('regStatus').style.display = 'block';
+    setStatus(document.getElementById('regStatus'), 'Введите корректный номер телефона');
     return;
   }
 
@@ -375,18 +417,24 @@ async function registerUser(e) {
   btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Регистрация…';
   btn.disabled = true;
 
-  // В продакшене: POST на Apps Script
   state.phone = phone;
-  state.userId = 'USER-' + Date.now().toString(36).toUpperCase();
   state.promoCode = null;
+
+  // Реальный API
+  if (ENV.API_URL) {
+    const res = await apiPost({ action: 'register', phone });
+    state.userId = res?.id || 'U-' + Date.now().toString(36);
+  }
+
+  // Демо
+  if (ENV.DEMO_MODE) {
+    state.userId = 'USER-' + Date.now().toString(36).toUpperCase();
+  }
 
   document.getElementById('taskPhone').textContent = phone;
   btn.innerHTML = '<i class="fas fa-arrow-right"></i> Получить задание';
   btn.disabled = false;
   showPage('pageTask');
-
-  // Имитация регистрации на платформе
-  console.log('Registered:', state.userId, phone);
 }
 
 // === Выполнил ===
@@ -395,39 +443,71 @@ async function markDone() {
   btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Отправка…';
   btn.disabled = true;
 
-  // В продакшене: POST на Apps Script (статус: review)
-  document.getElementById('taskStatus').textContent = '✅ Заявка отправлена на проверку!';
-  document.getElementById('taskStatus').style.color = '#34c759';
-  document.getElementById('taskStatus').style.display = 'block';
+  const statusEl = document.getElementById('taskStatus');
 
+  if (ENV.API_URL) {
+    const res = await apiPost({ action: 'done', phone: state.phone });
+    if (res?.status !== 'review') {
+      setStatus(statusEl, '❌ Ошибка. Попробуйте ещё раз');
+      btn.innerHTML = '<i class="fas fa-check"></i> Выполнил!';
+      btn.disabled = false;
+      return;
+    }
+  }
+
+  setStatus(statusEl, '✅ Заявка отправлена на проверку!', '#34c759');
   btn.innerHTML = '<i class="fas fa-check"></i> Выполнил!';
   btn.disabled = false;
 
   showPage('pageCheck');
 
-  // Демо-режим: через N секунд автомат
+  // Демо-режим
   if (ENV.DEMO_MODE) {
     setTimeout(() => {
-      approveUser();
+      const ok = Math.random() > 0.2;
+      ok ? approveUser() : rejectUser();
     }, ENV.DEMO_DELAY_SEC * 1000);
+  }
+
+  // Реальный режим — поллинг каждые 10 сек
+  if (ENV.API_URL) {
+    startPolling();
   }
 }
 
-// === Одобрение (вызывается модератором/демо) ===
-function approveUser() {
-  // Генерация промокода
-  const now = new Date();
-  const day = String(now.getDate()).padStart(2,'0');
-  const month = String(now.getMonth()+1).padStart(2,'0');
-  const code = 'SR-' + day + month + '-' + String(Math.floor(Math.random()*999)).padStart(3,'0');
-  state.promoCode = code;
+// === Поллинг статуса ===
+function startPolling() {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(async () => {
+    const res = await apiGet({ phone: state.phone });
+    if (!res) return;
+    if (res.status === 'approved') {
+      clearInterval(pollTimer);
+      state.promoCode = res.promo;
+      document.getElementById('promoCode').textContent = res.promo;
+      showPage('pagePromo');
+    }
+    if (res.status === 'rejected') {
+      clearInterval(pollTimer);
+      rejectUser();
+    }
+  }, 10000);
+}
 
-  document.getElementById('promoCode').textContent = code;
+// === Одобрение ===
+function approveUser(code) {
+  if (pollTimer) clearInterval(pollTimer);
+  const now = new Date();
+  const d = String(now.getDate()).padStart(2,'0');
+  const m = String(now.getMonth()+1).padStart(2,'0');
+  const n = String(Math.floor(Math.random()*999)).padStart(3,'0');
+  state.promoCode = code || ('SR-' + d + m + '-' + n);
+  document.getElementById('promoCode').textContent = state.promoCode;
   showPage('pagePromo');
-  saveSession('promo');
 }
 
 function rejectUser() {
+  if (pollTimer) clearInterval(pollTimer);
   document.getElementById('checkEmoji').textContent = '❌';
   document.getElementById('checkTitle').textContent = 'Видео не найдено';
   document.getElementById('checkDesc').textContent = 'Мы не нашли ваше видео-резюме. Проверьте, что вы загрузили его на платформу.';
@@ -438,26 +518,31 @@ function rejectUser() {
 
 // === Проверка статуса (вручную) ===
 async function forceCheck() {
-  // В продакшене: GET с Apps Script status={new,review,approved,rejected}
-  document.querySelector('#checkWait .btn-outline').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Проверка…';
-  document.querySelector('#checkWait .btn-outline').disabled = true;
+  const btn = document.querySelector('#checkWait .btn-outline');
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Проверка…';
+  btn.disabled = true;
 
-  // Демо: случайный результат
-  if (ENV.DEMO_MODE) {
-    await new Promise(r => setTimeout(r, 1000));
-    if (Math.random() > 0.3) {
-      approveUser();
-    } else {
-      rejectUser();
-    }
+  if (ENV.API_URL) {
+    await startPolling();
+    btn.innerHTML = '<i class="fas fa-sync"></i> Проверить сейчас';
+    btn.disabled = false;
+    return;
   }
-  document.querySelector('#checkWait .btn-outline').innerHTML = '<i class="fas fa-sync"></i> Проверить сейчас';
-  document.querySelector('#checkWait .btn-outline').disabled = false;
+
+  // Демо
+  await new Promise(r => setTimeout(r, 1000));
+  Math.random() > 0.3 ? approveUser() : rejectUser();
+  btn.innerHTML = '<i class="fas fa-sync"></i> Проверить сейчас';
+  btn.disabled = false;
 }
 
-// === Webhook для модератора (вызывается из Telegram бота) ===
-// Модератор открывает: sobes.ru/moderate?phone=+7xxx
-// Или через бота: /approve +7xxx или /reject +7xxx
+// === Глобальный доступ ===
+window.registerUser = registerUser;
+window.markDone = markDone;
+window.forceCheck = forceCheck;
+window.approveUser = approveUser;
+window.rejectUser = rejectUser;
+window.showPage = showPage;
 </script>
 </body>
 </html>
