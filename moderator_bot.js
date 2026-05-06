@@ -11,6 +11,13 @@
  * /list — все заявки (последние 10)
  */
 
+// Минимальный HTTP-сервер для Render (чтобы не ругался на отсутствие порта)
+const http = require('http');
+http.createServer((req, res) => {
+  res.writeHead(200, {'Content-Type': 'text/plain'});
+  res.end('SOBES.RU Moderator Bot is running');
+}).listen(process.env.PORT || 10000);
+
 const TELEGRAM_TOKEN = '7949630793:AAHmdOmSer6igd93mMuBu4w_w2BjIviTDLs';
 const TG_API = `https://api.telegram.org/bot${TELEGRAM_TOKEN}`;
 
