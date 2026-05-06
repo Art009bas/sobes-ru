@@ -1,250 +1,193 @@
 /*
  * SOBES.RU — Backend (Google Apps Script)
- * Привязывается к Google Sheets и Telegram Bot
- * 
- * Как установить:
- * 1. Создай Google Таблицу (docs.google.com/spreadsheets)
- * 2. Extensions → Apps Script
- * 3. Вставь этот код, сохрани
- * 4. Настрой триггер (см. ниже)
- * 5. Разверни как веб-приложение (Deploy → New deployment → Web app)
+ * Google Sheets + Telegram Bot + JSONP support
  */
 
 // === НАСТРОЙКИ ===
 const CONFIG = {
   SHEET_NAME: 'Заявки',
   PROMO_SHEET: 'Промокоды',
-  TG_BOT_TOKEN: '7949630793:AAHmdOmSer6igd93mMuBu4w_w2BjIviTDLs',  // бот модератора
-  TG_MODERATOR_CHAT: '476689983',  // твой chat_id для уведомлений
-  TG_GROUP_CHAT: '-4937769961',    // группа для ленты заявок
+  TG_BOT_TOKEN: '7949630793:AAHmdOmSer6igd93mMuBu4w_w2BjIviTDLs',
+  TG_MODERATOR_CHAT: '476689983',
+  TG_GROUP_CHAT: '-4937769961',
   SOBES_LANDING: 'https://art009bas.github.io/sobes-ru/'
 };
 
-// === СТРУКТУРА ТАБЛИЦЫ ===
-// Колонки в "Заявки":
-// A: ID          B: Телефон    C: Статус      D: Промокод
-// E: Дата        F: Время       G: Ссылка
-
-// === ВЕБХУК (вызывается с лендинга) ===
-function doPost(e) {
-  try {
-    let data;
-    if (e.postData && e.postData.contents) {
-      try { data = JSON.parse(e.postData.contents); } catch(e2) { data = e.parameter; }
-    } else { data = e.parameter; }
-    
-    const action = data.action || 'register';
-    const callback = data.callback || e.parameter.callback;
-
-    if (action === 'register') return wrap(registerUser(data.phone), callback);
-    if (action === 'done') return wrap(markDone(data.phone), callback);
-    if (action === 'moderate') return wrap(moderateUser(data.phone, data.status), callback);
-    if (action === 'check') return wrap(checkStatus(data.phone), callback);
-    return wrap({ error: 'Unknown action' }, callback, 400);
-  } catch(err) {
-    return wrap({ error: err.message }, callback, 500);
-  }
-}
-
-// === GET (все действия) ===
+// === DO GET (все через GET для CORS-free работы) ===
 function doGet(e) {
   try {
     const action = e.parameter.action || 'check';
     const phone = e.parameter.phone;
-    const callback = e.parameter.callback;
-    
-    if (!phone) return wrap({ error: 'Phone required' }, callback, 400);
-    
-    if (action === 'register') return wrap(registerUser(phone), callback);
-    if (action === 'done') return wrap(markDone(phone), callback);
-    return wrap(checkStatus(phone), callback);
-  } catch(err) {
-    return wrap({ error: err.message }, 'callback', 500);
+    const cb = e.parameter.callback;
+    var result;
+
+    if (!phone) {
+      result = { error: 'Phone required' };
+    } else if (action === 'register') {
+      result = registerUser(phone);
+    } else if (action === 'done') {
+      result = markDone(phone);
+    } else {
+      result = checkStatus(phone);
+    }
+
+    var json = JSON.stringify(result);
+    if (cb) {
+      return ContentService.createTextOutput(cb + '(' + json + ')')
+        .setMimeType(ContentService.MimeType.JAVASCRIPT);
+    }
+    return ContentService.createTextOutput(json)
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    var errJson = JSON.stringify({ error: err.message });
+    return ContentService.createTextOutput(errJson)
+      .setMimeType(ContentService.MimeType.JSON);
   }
 }
 
-// === JSONP / JSON ===
-function wrap(data, callback, code) {
-  // Первый аргумент может быть code (для совместимости)
-  if (typeof data === 'number') {
-    code = data;
-    data = callback;
-    callback = arguments[2];
+// === DO POST ===
+function doPost(e) {
+  var data;
+  try {
+    if (e.postData && e.postData.contents) {
+      try { data = JSON.parse(e.postData.contents); } catch(er) { data = e.parameter; }
+    } else { data = e.parameter; }
+    return doGet(e);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
   }
-  data = data || { error: 'Unknown' };
-  const json = JSON.stringify(data);
-  if (callback) {
-    return ContentService
-      .createTextOutput(callback + '(' + json + ')')
-      .setMimeType(ContentService.MimeType.JAVASCRIPT);
-  }
-  return ContentService
-    .createTextOutput(json)
-    .setMimeType(ContentService.MimeType.JSON);
 }
 
 // === РЕГИСТРАЦИЯ ===
 function registerUser(phone) {
-  const sheet = getSheet();
-  const existing = findUser(phone);
-
+  var sheet = getSheet_();
+  var existing = findUser_(phone);
   if (existing) {
-    return wrap(200, { status: 'exists', id: existing[0], phone: phone });
+    return { status: 'exists', id: existing[0], phone: phone };
   }
 
-  const id = 'U' + Date.now().toString(36).toUpperCase();
-  const now = new Date();
+  var id = 'U' + Date.now().toString(36).toUpperCase();
+  var now = new Date();
 
   sheet.appendRow([
-    id,
-    phone,
-    'new',           // статус: new, review, approved, rejected
-    '',               // промокод
+    id, phone, 'new', '',
     Utilities.formatDate(now, 'Asia/Novosibirsk', 'dd.MM.yyyy'),
-    Utilities.formatDate(now, 'Asia/Novosibirsk', 'HH:mm:ss'),
-    ''                // ссылка на видео (заполнит модератор)
+    Utilities.formatDate(now, 'Asia/Novosibirsk', 'HH:mm:ss'), ''
   ]);
 
-  sendTelegram(CONFIG.TG_GROUP_CHAT,
-    `📋 <b>Новый участник</b>\n👤 Телефон: ${phone}\n🔗 ${CONFIG.SOBES_LANDING}?moderate=${id}\n🆔 ${id}`
+  tgSend(CONFIG.TG_GROUP_CHAT,
+    '📋 <b>Новый участник</b>\n👤 ' + phone + '\n🆔 ' + id
   );
 
-  return wrap(200, { status: 'registered', id: id, phone: phone });
+  return { status: 'registered', id: id, phone: phone };
 }
 
 // === ВЫПОЛНИЛ ===
 function markDone(phone) {
-  const sheet = getSheet();
-  const row = findUserRow(phone);
-  if (!row) return wrap(404, { error: 'User not found' });
+  var sheet = getSheet_();
+  var row = findUserRow_(phone);
+  if (!row) return { error: 'User not found' };
 
   sheet.getRange(row, 3).setValue('review');
 
-  sendTelegram(CONFIG.TG_MODERATOR_CHAT,
-    `🕐 <b>Ожидает проверки</b>\n📞 ${phone}\n\nПроверить видео по номеру телефона.\n/approve ${phone}\n/reject ${phone}`
+  tgSend(CONFIG.TG_MODERATOR_CHAT,
+    '🕐 <b>Ожидает проверки</b>\n📞 ' + phone + '\n/approve ' + phone + '\n/reject ' + phone
   );
 
-  return wrap(200, { status: 'review' });
+  return { status: 'review' };
 }
 
 // === МОДЕРАЦИЯ ===
 function moderateUser(phone, status) {
-  const sheet = getSheet();
-  const row = findUserRow(phone);
-  if (!row) return wrap(404, { error: 'User not found' });
+  var sheet = getSheet_();
+  var row = findUserRow_(phone);
+  if (!row) return { error: 'User not found' };
 
   if (status === 'approved') {
-    const code = generatePromoCode();
+    var code = genCode_();
     sheet.getRange(row, 3).setValue('approved');
     sheet.getRange(row, 4).setValue(code);
+    logCode_(code, phone);
 
-    logPromoCode(code, phone);
-
-    sendTelegram(CONFIG.TG_GROUP_CHAT,
-      `✅ <b>Заявка одобрена</b>\n📞 ${phone}\n🎟 Промокод: <b>${code}</b>`
+    tgSend(CONFIG.TG_GROUP_CHAT,
+      '✅ <b>Одобрено</b>\n📞 ' + phone + '\n🎟 Промокод: <b>' + code + '</b>'
     );
-
-    return wrap(200, { status: 'approved', promo: code });
+    return { status: 'approved', promo: code, phone: phone };
   }
 
   if (status === 'rejected') {
     sheet.getRange(row, 3).setValue('rejected');
-
-    sendTelegram(CONFIG.TG_GROUP_CHAT,
-      `❌ <b>Заявка отклонена</b>\n📞 ${phone}`
-    );
-
-    return wrap(200, { status: 'rejected' });
+    tgSend(CONFIG.TG_GROUP_CHAT, '❌ <b>Отклонено</b>\n📞 ' + phone);
+    return { status: 'rejected', phone: phone };
   }
 
-  return wrap(400, { error: 'Invalid status' });
+  return { error: 'Invalid status' };
 }
 
 // === ПРОВЕРКА СТАТУСА ===
 function checkStatus(phone) {
-  const sheet = getSheet();
-  const row = findUserRow(phone);
-  if (!row) return wrap(404, { error: 'User not found' });
+  var sheet = getSheet_();
+  var row = findUserRow_(phone);
+  if (!row) return { error: 'User not found' };
 
-  const data = sheet.getRange(row, 1, 1, 7).getValues()[0];
-
-  return wrap(200, {
-    status: data[2],
-    promo: data[3] || null,
-    id: data[0],
-    phone: data[1]
-  });
+  var data = sheet.getRange(row, 1, 1, 7).getValues()[0];
+  return { status: data[2], promo: data[3] || null, id: data[0], phone: data[1] };
 }
 
 // === УТИЛИТЫ ===
-function getSheet() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let sheet = ss.getSheetByName(CONFIG.SHEET_NAME);
-  if (!sheet) {
-    sheet = ss.insertSheet(CONFIG.SHEET_NAME);
-    sheet.appendRow(['ID', 'Телефон', 'Статус', 'Промокод', 'Дата', 'Время', 'Ссылка']);
+function getSheet_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var s = ss.getSheetByName(CONFIG.SHEET_NAME);
+  if (!s) {
+    s = ss.insertSheet(CONFIG.SHEET_NAME);
+    s.appendRow(['ID', 'Телефон', 'Статус', 'Промокод', 'Дата', 'Время', 'Ссылка']);
   }
-  return sheet;
+  return s;
 }
 
-function findUser(phone) {
-  const sheet = getSheet();
-  const data = sheet.getDataRange().getValues();
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][1] === phone) return data[i];
-  }
-  return null;
-}
-
-function findUserRow(phone) {
-  const sheet = getSheet();
-  const data = sheet.getDataRange().getValues();
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][1] === phone) return i + 1;
+function findUser_(phone) {
+  var s = getSheet_();
+  var d = s.getDataRange().getValues();
+  for (var i = 1; i < d.length; i++) {
+    if (d[i][1] == phone) return d[i];
   }
   return null;
 }
 
-function generatePromoCode() {
-  const now = new Date();
-  const day = String(now.getDate()).padStart(2, '0');
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const num = String(Math.floor(Math.random() * 999)).padStart(3, '0');
-  return 'SR-' + day + month + '-' + num;
-}
-
-function getListText() {
-  const sheet = getSheet();
-  const data = sheet.getDataRange().getValues();
-  if (data.length < 2) return 'Нет заявок';
-  
-  const lines = data.slice(1).slice(-10).map(row => {
-    const icon = row[2] === 'approved' ? '✅' :
-                 row[2] === 'rejected' ? '❌' :
-                 row[2] === 'review' ? '🕐' : '🆕';
-    return `${icon} ${row[1]} — ${row[2]}`;
-  });
-  return `<b>Последние заявки:</b>\n${lines.join('\n')}`;
-}
-
-function logPromoCode(code, phone) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let sheet = ss.getSheetByName(CONFIG.PROMO_SHEET);
-  if (!sheet) {
-    sheet = ss.insertSheet(CONFIG.PROMO_SHEET);
-    sheet.appendRow(['Промокод', 'Телефон', 'Дата', 'Статус']);
+function findUserRow_(phone) {
+  var s = getSheet_();
+  var d = s.getDataRange().getValues();
+  for (var i = 1; i < d.length; i++) {
+    if (d[i][1] == phone) return i + 1;
   }
-  const now = new Date();
-  sheet.appendRow([
-    code,
-    phone,
-    Utilities.formatDate(now, 'Asia/Novosibirsk', 'dd.MM.yyyy HH:mm'),
+  return null;
+}
+
+function genCode_() {
+  var now = new Date();
+  var d = ('0' + now.getDate()).slice(-2);
+  var m = ('0' + (now.getMonth() + 1)).slice(-2);
+  var n = String(Math.floor(Math.random() * 999)).padStart(3, '0');
+  return 'SR-' + d + m + '-' + n;
+}
+
+function logCode_(code, phone) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var s = ss.getSheetByName(CONFIG.PROMO_SHEET);
+  if (!s) {
+    s = ss.insertSheet(CONFIG.PROMO_SHEET);
+    s.appendRow(['Промокод', 'Телефон', 'Дата', 'Статус']);
+  }
+  s.appendRow([
+    code, phone,
+    Utilities.formatDate(new Date(), 'Asia/Novosibirsk', 'dd.MM.yyyy HH:mm'),
     'активен'
   ]);
 }
 
-function sendTelegram(chatId, text) {
-  const url = `https://api.telegram.org/bot${CONFIG.TG_BOT_TOKEN}/sendMessage`;
+function tgSend(chatId, text) {
+  var url = 'https://api.telegram.org/bot' + CONFIG.TG_BOT_TOKEN + '/sendMessage';
   UrlFetchApp.fetch(url, {
     method: 'post',
     contentType: 'application/json',
@@ -257,56 +200,52 @@ function sendTelegram(chatId, text) {
   });
 }
 
+// === СПИСОК ЗАЯВОК ===
+function getListText() {
+  var s = getSheet_();
+  var d = s.getDataRange().getValues();
+  if (d.length < 2) return 'Нет заявок';
 
-// === ТРИГГЕР для Telegram бота ===
-// Этот скрипт НЕ может принимать вебхуки Telegram (Apps Script не умеет в long polling).
-// Поэтому ставим триггер:每分钟 запускает обработку команд модератора.
-// Либо используем отдельного бота на VPS.
+  var lines = [];
+  var start = Math.max(1, d.length - 10);
+  for (var i = start; i < d.length; i++) {
+    var icon = d[i][2] == 'approved' ? '✅' : d[i][2] == 'rejected' ? '❌' : d[i][2] == 'review' ? '🕐' : '🆕';
+    lines.push(icon + ' ' + d[i][1] + ' — ' + d[i][2]);
+  }
+  return '<b>Последние заявки:</b>\n' + lines.join('\n');
+}
 
+// === ТРИГГЕР (команды модератора) ===
 function processModeratorCommands() {
-  // Получает последние сообщения из бота и обрабатывает команды
-  // /approve +7xxx или /reject +7xxx
-  const url = `https://api.telegram.org/bot${CONFIG.TG_BOT_TOKEN}/getUpdates`;
-  const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
-  const data = JSON.parse(res.getContentText());
-
+  var url = 'https://api.telegram.org/bot' + CONFIG.TG_BOT_TOKEN + '/getUpdates';
+  var res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+  var data = JSON.parse(res.getContentText());
   if (!data.ok || !data.result) return;
 
-  const updates = data.result.filter(u => {
-    return u.message && u.message.text && u.message.chat.id == CONFIG.TG_MODERATOR_CHAT;
-  });
+  for (var i = 0; i < data.result.length; i++) {
+    var u = data.result[i];
+    if (!u.message || !u.message.text) continue;
+    if (u.message.chat.id != CONFIG.TG_MODERATOR_CHAT) continue;
 
-  for (const update of updates) {
-    const text = update.message.text.trim();
-    let phone, status;
+    var text = u.message.text.trim();
+    var phone, status;
 
-    if (text.startsWith('/approve ')) {
+    if (text === '/list') {
+      tgSend(CONFIG.TG_MODERATOR_CHAT, getListText());
+    } else if (text.startsWith('/approve ')) {
       phone = text.replace('/approve ', '').trim();
-      status = 'approved';
+      var r = moderateUser(phone, 'approved');
+      tgSend(CONFIG.TG_MODERATOR_CHAT, r.error ? '❌ ' + r.error : '✅ Одобрено: ' + phone);
     } else if (text.startsWith('/reject ')) {
       phone = text.replace('/reject ', '').trim();
-      status = 'rejected';
-    } else if (text === '/list') {
-      sendTelegram(CONFIG.TG_MODERATOR_CHAT, getListText());
-      continue;
+      var r = moderateUser(phone, 'rejected');
+      tgSend(CONFIG.TG_MODERATOR_CHAT, r.error ? '❌ ' + r.error : '✅ Отклонено: ' + phone);
     } else if (text.startsWith('/status ')) {
       phone = text.replace('/status ', '').trim();
-      const info = checkStatus(phone);
-      const content = JSON.parse(info.getContent());
-      sendTelegram(CONFIG.TG_MODERATOR_CHAT,
-        `📊 <b>Статус:</b> ${phone}\n📌 ${content.status || 'не найден'}\n🎟 ${content.promo ? 'Промокод: '+content.promo : ''}`,
-        {parse_mode:'HTML'}
+      var r = checkStatus(phone);
+      tgSend(CONFIG.TG_MODERATOR_CHAT,
+        '📊 <b>Статус:</b> ' + phone + '\n📌 ' + (r.status || 'не найден') + (r.promo ? '\n🎟 ' + r.promo : '')
       );
-      continue;
-    } else {
-      continue;
     }
-
-    moderateUser(phone, status);
-
-    // Подтверждение модератору
-    sendTelegram(CONFIG.TG_MODERATOR_CHAT,
-      `✅ ${status === 'approved' ? 'Одобрено' : 'Отклонено'}: ${phone}`
-    );
   }
 }
