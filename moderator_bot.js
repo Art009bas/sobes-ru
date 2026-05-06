@@ -11,12 +11,44 @@
  * /list — все заявки (последние 10)
  */
 
-// Минимальный HTTP-сервер для Render (чтобы не ругался на отсутствие порта)
+// HTTP-сервер для Render с Telegram webhook
 const http = require('http');
-http.createServer((req, res) => {
-  res.writeHead(200, {'Content-Type': 'text/plain'});
-  res.end('SOBES.RU Moderator Bot is running');
-}).listen(process.env.PORT || 10000);
+const server = http.createServer(async (req, res) => {
+  if (req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', async () => {
+      try {
+        const update = JSON.parse(body);
+        if (update.message && update.message.text) {
+          await handleCommand(update.message);
+        }
+        if (update.callback_query) {
+          const q = update.callback_query;
+          const data = q.data;
+          await fetch(`${TG_API}/answerCallbackQuery`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ callback_query_id: q.id })
+          });
+          const [action, phone] = data.split(':');
+          const cmd = action === 'approve' ? '/approve ' : '/reject ';
+          await handleCommand({ chat: { id: q.message.chat.id }, text: cmd + phone });
+        }
+      } catch (e) {
+        console.error('Webhook error:', e.message);
+      }
+      res.writeHead(200);
+      res.end('OK');
+    });
+  } else {
+    res.writeHead(200, {'Content-Type': 'text/plain'});
+    res.end('SOBES.RU Moderator Bot is running');
+  }
+});
+server.listen(process.env.PORT || 10000, () => {
+  console.log('Server listening on port', process.env.PORT || 10000);
+});
 
 const TELEGRAM_TOKEN = '7949630793:AAHmdOmSer6igd93mMuBu4w_w2BjIviTDLs';
 const TG_API = `https://api.telegram.org/bot${TELEGRAM_TOKEN}`;
@@ -186,48 +218,7 @@ async function handleCommand(msg) {
 }
 
 // === ОСНОВНОЙ ЦИКЛ ===
-async function main() {
-  console.log('🤖 SOBES.RU Moderator Bot started');
-  let offset = 0;
-
-  while (true) {
-    try {
-      const updates = await getUpdates(offset);
-
-      for (const update of updates) {
-        offset = update.update_id + 1;
-
-        if (update.message && update.message.text) {
-          await handleCommand(update.message);
-        }
-
-        // Callback от кнопок
-        if (update.callback_query) {
-          const q = update.callback_query;
-          const chatId = q.message.chat.id;
-          const data = q.data; // format: approve:+7xxx или reject:+7xxx
-
-          await fetch(`${TG_API}/answerCallbackQuery`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ callback_query_id: q.id })
-          });
-
-          // Создаём фейковое сообщение для обработчика
-          const [action, phone] = data.split(':');
-          const cmd = action === 'approve' ? '/approve ' : '/reject ';
-          await handleCommand({
-            chat: { id: chatId },
-            text: cmd + phone
-          });
-        }
-      }
-    } catch (err) {
-      console.error('Poll error:', err.message);
-    }
-
-    await new Promise(r => setTimeout(r, 1000));
-  }
-}
-
-main().catch(console.error);
+// Webhook-based — сервер принимает обновления от Telegram
+console.log('🤖 SOBES.RU Moderator Bot started (webhook mode)');
+console.log('Webhook URL: https://sobes-ru-bot.onrender.com');
+console.log('Waiting for Telegram updates...');
