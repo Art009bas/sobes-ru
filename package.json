@@ -1,0 +1,10 @@
+{
+  "name": "sobes-ru-bot",
+  "version": "1.0.0",
+  "description": "Telegram moderator bot for SOBES.RU",
+  "main": "moderator_bot.js",
+  "scripts": {
+    "start": "node moderator_bot.js"
+  },
+  "dependencies": {}
+}
