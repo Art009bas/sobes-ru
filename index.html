@@ -384,16 +384,11 @@ function setStatus(el, text, color, display) {
   el.style.display = display || 'block';
 }
 
-// === API-запросы (GET — не блокируется CORS) ===
-function apiGet(params) {
+// === API-запросы (no-cors — ошибки не показываем) ===
+function apiCall(params) {
   if (!ENV.API_URL) return Promise.resolve({ ok: true });
   const url = ENV.API_URL + '?' + new URLSearchParams(params).toString();
-  return fetch(url).then(r => {
-    try { return r.json(); } catch(e) { return { ok: true }; }
-  }).catch(e => {
-    console.log('API Error:', e);
-    return { ok: true };
-  });
+  return fetch(url, { mode: 'no-cors' }).then(() => ({ ok: true })).catch(() => ({ ok: true }));
 }
 
 // === Регистрация ===
@@ -418,7 +413,7 @@ async function registerUser(e) {
 
   // Реальный API
   if (ENV.API_URL) {
-    const res = await apiGet({ action: 'register', phone: phone });
+    const res = await apiCall({ action: 'register', phone: phone });
     state.userId = res?.id || 'U-' + Date.now().toString(36);
   }
 
@@ -442,7 +437,7 @@ async function markDone() {
   const statusEl = document.getElementById('taskStatus');
 
   if (ENV.API_URL) {
-    const res = await apiGet({ action: 'done', phone: state.phone });
+    const res = await apiCall({ action: 'done', phone: state.phone });
     // no-cors ответ не читается — считаем что отправилось
   }
 
@@ -470,7 +465,7 @@ async function markDone() {
 function startPolling() {
   if (pollTimer) clearInterval(pollTimer);
   pollTimer = setInterval(async () => {
-    const res = await apiGet({ phone: state.phone });
+    const res = await apiCall({ phone: state.phone });
     if (!res) return;
     if (res.status === 'approved') {
       clearInterval(pollTimer);
