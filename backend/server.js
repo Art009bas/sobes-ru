@@ -136,6 +136,24 @@ let lastUpdateId = 0;
 
 async function checkPendingApprovals() {
   const https = require('https');
+  
+  // При старте получаем последний update_id, чтобы не обрабатывать старые
+  try {
+    const init = await new Promise((resolve, reject) => {
+      https.get(`https://api.telegram.org/bot${BOT_TOKEN}/getUpdates?offset=-1`, res => {
+        let b = '';
+        res.on('data', c => b += c);
+        res.on('end', () => resolve(JSON.parse(b)));
+      }).on('error', reject);
+    });
+    if (init.ok && init.result.length > 0) {
+      lastUpdateId = init.result[init.result.length - 1].update_id;
+    }
+    console.log('Bot polling started, lastUpdateId:', lastUpdateId);
+  } catch(e) {
+    console.log('Bot init error:', e.message);
+  }
+  
   setInterval(async () => {
     try {
       const url = `https://api.telegram.org/bot${BOT_TOKEN}/getUpdates?offset=${lastUpdateId + 1}&timeout=30`;
