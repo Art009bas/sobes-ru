@@ -257,10 +257,7 @@ function sendTelegram(chatId, text) {
   });
 }
 
-  return ContentService
-    .createTextOutput(JSON.stringify(data))
-    .setMimeType(ContentService.MimeType.JSON);
-}
+
 // === ТРИГГЕР для Telegram бота ===
 // Этот скрипт НЕ может принимать вебхуки Telegram (Apps Script не умеет в long polling).
 // Поэтому ставим триггер:每分钟 запускает обработку команд модератора.
