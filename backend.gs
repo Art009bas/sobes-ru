@@ -186,6 +186,20 @@ function generatePromoCode() {
   return 'SR-' + day + month + '-' + num;
 }
 
+function getListText() {
+  const sheet = getSheet();
+  const data = sheet.getDataRange().getValues();
+  if (data.length < 2) return 'Нет заявок';
+  
+  const lines = data.slice(1).slice(-10).map(row => {
+    const icon = row[2] === 'approved' ? '✅' :
+                 row[2] === 'rejected' ? '❌' :
+                 row[2] === 'review' ? '🕐' : '🆕';
+    return `${icon} ${row[1]} — ${row[2]}`;
+  });
+  return `<b>Последние заявки:</b>\n${lines.join('\n')}`;
+}
+
 function logPromoCode(code, phone) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName(CONFIG.PROMO_SHEET);
@@ -250,6 +264,18 @@ function processModeratorCommands() {
     } else if (text.startsWith('/reject ')) {
       phone = text.replace('/reject ', '').trim();
       status = 'rejected';
+    } else if (text === '/list') {
+      sendTelegram(CONFIG.TG_MODERATOR_CHAT, getListText());
+      continue;
+    } else if (text.startsWith('/status ')) {
+      phone = text.replace('/status ', '').trim();
+      const info = checkStatus(phone);
+      const content = JSON.parse(info.getContent());
+      sendTelegram(CONFIG.TG_MODERATOR_CHAT,
+        `📊 <b>Статус:</b> ${phone}\n📌 ${content.status || 'не найден'}\n🎟 ${content.promo ? 'Промокод: '+content.promo : ''}`,
+        {parse_mode:'HTML'}
+      );
+      continue;
     } else {
       continue;
     }
