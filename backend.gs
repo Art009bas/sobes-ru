@@ -28,57 +28,59 @@ const CONFIG = {
 // === ВЕБХУК (вызывается с лендинга) ===
 function doPost(e) {
   try {
-    // Поддерживаем и JSON, и form-data
     let data;
     if (e.postData && e.postData.contents) {
-      try {
-        data = JSON.parse(e.postData.contents);
-      } catch(e2) {
-        // form-data — парсим параметры
-        data = e.parameter;
-      }
-    } else {
-      data = e.parameter;
-    }
+      try { data = JSON.parse(e.postData.contents); } catch(e2) { data = e.parameter; }
+    } else { data = e.parameter; }
     
     const action = data.action || 'register';
+    const callback = data.callback || e.parameter.callback;
 
-    if (action === 'register') {
-      return registerUser(data.phone);
-    }
-    if (action === 'done') {
-      return markDone(data.phone);
-    }
-    if (action === 'moderate') {
-      return moderateUser(data.phone, data.status);
-    }
-    if (action === 'check') {
-      return checkStatus(data.phone);
-    }
-    return respond(400, { error: 'Unknown action' });
+    if (action === 'register') return wrap(registerUser(data.phone), callback);
+    if (action === 'done') return wrap(markDone(data.phone), callback);
+    if (action === 'moderate') return wrap(moderateUser(data.phone, data.status), callback);
+    if (action === 'check') return wrap(checkStatus(data.phone), callback);
+    return wrap({ error: 'Unknown action' }, callback, 400);
   } catch(err) {
-    return respond(500, { error: err.message });
+    return wrap({ error: err.message }, callback, 500);
   }
 }
 
-// === GET (все действия, не только проверка) ===
+// === GET (все действия) ===
 function doGet(e) {
   try {
     const action = e.parameter.action || 'check';
     const phone = e.parameter.phone;
+    const callback = e.parameter.callback;
     
-    if (!phone) return respond(400, { error: 'Phone required' });
+    if (!phone) return wrap({ error: 'Phone required' }, callback, 400);
     
-    if (action === 'register') {
-      return registerUser(phone);
-    }
-    if (action === 'done') {
-      return markDone(phone);
-    }
-    return checkStatus(phone);
+    if (action === 'register') return wrap(registerUser(phone), callback);
+    if (action === 'done') return wrap(markDone(phone), callback);
+    return wrap(checkStatus(phone), callback);
   } catch(err) {
-    return respond(500, { error: err.message });
+    return wrap({ error: err.message }, 'callback', 500);
   }
+}
+
+// === JSONP / JSON ===
+function wrap(data, callback, code) {
+  // Первый аргумент может быть code (для совместимости)
+  if (typeof data === 'number') {
+    code = data;
+    data = callback;
+    callback = arguments[2];
+  }
+  data = data || { error: 'Unknown' };
+  const json = JSON.stringify(data);
+  if (callback) {
+    return ContentService
+      .createTextOutput(callback + '(' + json + ')')
+      .setMimeType(ContentService.MimeType.JAVASCRIPT);
+  }
+  return ContentService
+    .createTextOutput(json)
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 // === РЕГИСТРАЦИЯ ===
@@ -87,7 +89,7 @@ function registerUser(phone) {
   const existing = findUser(phone);
 
   if (existing) {
-    return respond(200, { status: 'exists', id: existing[0], phone: phone });
+    return wrap(200, { status: 'exists', id: existing[0], phone: phone });
   }
 
   const id = 'U' + Date.now().toString(36).toUpperCase();
@@ -107,14 +109,14 @@ function registerUser(phone) {
     `📋 <b>Новый участник</b>\n👤 Телефон: ${phone}\n🔗 ${CONFIG.SOBES_LANDING}?moderate=${id}\n🆔 ${id}`
   );
 
-  return respond(200, { status: 'registered', id: id, phone: phone });
+  return wrap(200, { status: 'registered', id: id, phone: phone });
 }
 
 // === ВЫПОЛНИЛ ===
 function markDone(phone) {
   const sheet = getSheet();
   const row = findUserRow(phone);
-  if (!row) return respond(404, { error: 'User not found' });
+  if (!row) return wrap(404, { error: 'User not found' });
 
   sheet.getRange(row, 3).setValue('review');
 
@@ -122,14 +124,14 @@ function markDone(phone) {
     `🕐 <b>Ожидает проверки</b>\n📞 ${phone}\n\nПроверить видео по номеру телефона.\n/approve ${phone}\n/reject ${phone}`
   );
 
-  return respond(200, { status: 'review' });
+  return wrap(200, { status: 'review' });
 }
 
 // === МОДЕРАЦИЯ ===
 function moderateUser(phone, status) {
   const sheet = getSheet();
   const row = findUserRow(phone);
-  if (!row) return respond(404, { error: 'User not found' });
+  if (!row) return wrap(404, { error: 'User not found' });
 
   if (status === 'approved') {
     const code = generatePromoCode();
@@ -142,7 +144,7 @@ function moderateUser(phone, status) {
       `✅ <b>Заявка одобрена</b>\n📞 ${phone}\n🎟 Промокод: <b>${code}</b>`
     );
 
-    return respond(200, { status: 'approved', promo: code });
+    return wrap(200, { status: 'approved', promo: code });
   }
 
   if (status === 'rejected') {
@@ -152,21 +154,21 @@ function moderateUser(phone, status) {
       `❌ <b>Заявка отклонена</b>\n📞 ${phone}`
     );
 
-    return respond(200, { status: 'rejected' });
+    return wrap(200, { status: 'rejected' });
   }
 
-  return respond(400, { error: 'Invalid status' });
+  return wrap(400, { error: 'Invalid status' });
 }
 
 // === ПРОВЕРКА СТАТУСА ===
 function checkStatus(phone) {
   const sheet = getSheet();
   const row = findUserRow(phone);
-  if (!row) return respond(404, { error: 'User not found' });
+  if (!row) return wrap(404, { error: 'User not found' });
 
   const data = sheet.getRange(row, 1, 1, 7).getValues()[0];
 
-  return respond(200, {
+  return wrap(200, {
     status: data[2],
     promo: data[3] || null,
     id: data[0],
@@ -255,12 +257,10 @@ function sendTelegram(chatId, text) {
   });
 }
 
-function respond(code, data) {
   return ContentService
     .createTextOutput(JSON.stringify(data))
     .setMimeType(ContentService.MimeType.JSON);
 }
-
 // === ТРИГГЕР для Telegram бота ===
 // Этот скрипт НЕ может принимать вебхуки Telegram (Apps Script не умеет в long polling).
 // Поэтому ставим триггер:每分钟 запускает обработку команд модератора.

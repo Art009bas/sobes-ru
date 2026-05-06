@@ -384,11 +384,23 @@ function setStatus(el, text, color, display) {
   el.style.display = display || 'block';
 }
 
-// === API-запросы (no-cors — ошибки не показываем) ===
+// === API-запросы (JSONP — не блокируется CORS) ===
 function apiCall(params) {
-  if (!ENV.API_URL) return Promise.resolve({ ok: true });
-  const url = ENV.API_URL + '?' + new URLSearchParams(params).toString();
-  return fetch(url, { mode: 'no-cors' }).then(() => ({ ok: true })).catch(() => ({ ok: true }));
+  if (!ENV.API_URL) return Promise.resolve();
+  return new Promise(resolve => {
+    const script = document.createElement('script');
+    const callbackName = 'cb_' + Date.now();
+    const url = ENV.API_URL + '?' + new URLSearchParams(params).toString() + '&callback=' + callbackName;
+    window[callbackName] = () => { delete window[callbackName]; resolve(); };
+    script.src = url;
+    script.onerror = () => { delete window[callbackName]; resolve(); };
+    document.body.appendChild(script);
+    setTimeout(() => {
+      delete window[callbackName];
+      document.body.removeChild(script);
+      resolve();
+    }, 5000);
+  });
 }
 
 // === Регистрация ===
